@@ -4,6 +4,8 @@ This repository contains infrastructure as code (Bicep) to deploy a comprehensiv
 
 ## Pre-deployment Steps
 
+> **Bastion Developer SKU:** this fork deploys free Bastion Developer hosts, one in each VNet that hosts VMs (spoke1, spoke2, workload), because the Developer SKU does not support VNet peering. Both of your regions must support it — see the [region list](https://learn.microsoft.com/azure/bastion/bastion-sku-comparison). It allows one VM connection at a time and portal connections only. Set `deployBastion` to `false` if a region is unsupported.
+
 1. **Verify VM SKU availability in your target regions**:
    This deployment uses `Standard_B2s_v2` VM SKUs by default. Check that this SKU is available in your chosen regions:
    ```bash
@@ -123,7 +125,7 @@ Edit `infra/main.parameters.json` before running `azd up`. Key parameters you ca
 
 **Feature Toggles:**
 ```json
-"deployBastion": { "value": false },      // Set to false to skip Bastion (saves cost/quota)
+"deployBastion": { "value": false },      // Set to false to skip the Bastion Developer hosts (free; check region support)
 "deployVpnGateway": { "value": false },   // Set to false to skip VPN Gateway
 "deployKeyVault": { "value": true }       // Enable/disable Key Vault demos
 ```

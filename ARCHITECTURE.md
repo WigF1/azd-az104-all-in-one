@@ -13,11 +13,10 @@ flowchart TB
 
         subgraph HubRegion["📍 Hub Region"]
             subgraph HubVNet["hub-vnet 10.1.0.0/16"]
-                BastionSubnet["AzureBastionSubnet<br/>10.1.1.0/26"]
+                BastionSubnet["AzureBastionSubnet<br/>10.1.1.0/26<br/>(unused by Developer SKU)"]
                 GatewaySubnet["GatewaySubnet<br/>10.1.2.0/27"]
                 MgmtSubnet["hub-mgmt<br/>10.1.3.0/24"]
 
-                Bastion["🔐 Azure Bastion<br/>Standard SKU<br/>⚡ Conditional"]
                 VPNGw["🔗 VPN Gateway<br/>VpnGw1<br/>⚡ Conditional"]
             end
         end
@@ -26,6 +25,7 @@ flowchart TB
             subgraph Spoke1VNet["spoke1-vnet 10.2.0.0/16"]
                 Spoke1NSG["NSG: Allow HTTP 80"]
                 Spoke1Default["default 10.2.1.0/24"]
+                Bastion1["🔐 spoke1-vnet-bastion<br/>Developer SKU<br/>⚡ Conditional"]
 
                 subgraph WebTier["🌐 Web Tier"]
                     WebLB["⚖️ web-lb<br/>Public Standard LB"]
@@ -40,6 +40,7 @@ flowchart TB
                 Spoke2NSG["NSG: Allow HTTP 80"]
                 Spoke2Default["default 10.3.1.0/24"]
                 AppGwSubnet["AppGwSubnet 10.3.2.0/24"]
+                Bastion2["🔐 spoke2-vnet-bastion<br/>Developer SKU<br/>⚡ Conditional"]
 
                 subgraph AppTier["📱 App Tier"]
                     AppGw["🛡️ Application Gateway<br/>WAF_v2"]
@@ -57,6 +58,7 @@ flowchart TB
         subgraph WorkloadRegion["📍 Workload (Private Link)"]
             subgraph WorkloadVNet["workload-vnet 10.4.0.0/16"]
                 WorkloadDefault["default 10.4.1.0/24"]
+                Bastion3["🔐 workload-vnet-bastion<br/>Developer SKU<br/>⚡ Conditional"]
 
                 subgraph WorkloadTier["⚙️ Workload Tier"]
                     WorkloadLB["⚖️ workload-lb<br/>Private Standard LB"]
@@ -84,14 +86,14 @@ flowchart TB
 
     end
 
-    %% Bastion Access (conditional)
-    Bastion -.->|"Secure RDP/SSH"| Web1VM
-    Bastion -.->|"Secure RDP/SSH"| Web2VM
-    Bastion -.->|"Secure RDP/SSH"| AppVM
-    Bastion -.->|"Secure RDP/SSH"| WorkloadVM
+    %% Bastion Access (conditional) - Developer SKU reaches only VMs in its own VNet
+    Bastion1 -.->|"RDP"| Web1VM
+    Bastion1 -.->|"RDP"| Web2VM
+    Bastion2 -.->|"RDP"| AppVM
+    Bastion2 -.->|"RDP"| VMSS
+    Bastion3 -.->|"RDP"| WorkloadVM
 
     %% Subnet placements
-    BastionSubnet --- Bastion
     GatewaySubnet --- VPNGw
 
     %% Web Tier flow
@@ -143,7 +145,7 @@ flowchart TB
     classDef monitoring fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
 
     class HubVNet,BastionSubnet,GatewaySubnet,MgmtSubnet hub
-    class Bastion,VPNGw optional
+    class Bastion1,Bastion2,Bastion3,VPNGw optional
     class Spoke1VNet,WebTier spoke
     class Spoke2VNet,AppTier,ScaleTier spoke
     class WorkloadVNet,WorkloadTier workload
@@ -165,7 +167,7 @@ flowchart TB
 | | NSG (spoke1) | Allow HTTP | Spoke1 | No |
 | | NSG (spoke2) | Allow HTTP | Spoke2 | No |
 | **Gateways** | VPN Gateway | VpnGw1 | Hub | Yes (`deployVpnGateway`) |
-| | Azure Bastion | Standard | Hub | Yes (`deployBastion`) |
+| | Azure Bastion (x3) | Developer (free) | Spoke1, Spoke2, Workload | Yes (`deployBastion`) |
 | **Load Balancing** | web-lb | Public Standard | Spoke1 | No |
 | | workload-lb | Private Standard | Workload | No |
 | | Application Gateway | WAF_v2 | Spoke2 | No |
@@ -193,7 +195,7 @@ flowchart TB
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `deployBastion` | `true` | Deploy Azure Bastion in hub |
+| `deployBastion` | `true` | Deploy a free Bastion Developer host in each VM VNet (spoke1, spoke2, workload) |
 | `deployVpnGateway` | `true` | Deploy VPN Gateway + Gateway Transit |
 | `deployKeyVault` | `true` | Deploy Key Vault for CMK demos |
 | `enableCmkForStorage` | `false` | Enable Customer-Managed Keys on Storage |

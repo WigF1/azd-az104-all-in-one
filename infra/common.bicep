@@ -64,7 +64,7 @@ var vmSizes = {
 // Resource SKUs
 var skus = {
   storageAccount: 'Standard_LRS'
-  bastion: 'Standard'
+  bastion: 'Developer'
   vpnGateway: 'VpnGw1'
   appGateway: 'WAF_v2'
   loadBalancer: 'Standard'
