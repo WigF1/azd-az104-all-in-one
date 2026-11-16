@@ -36,6 +36,13 @@ param adminObjectId string = ''
 @description('Whether to enable Customer-Managed Keys for storage encryption')
 param enableCmkForStorage bool = false
 
+@description('Enable purge protection on the Key Vault (forced on when CMK is enabled)')
+param enablePurgeProtection bool = false
+
+// Built-in role definition IDs
+var keyVaultAdministratorRoleId = '00482a5a-887f-4fb3-b363-3b7fe8e74483'
+var keyVaultCryptoServiceEncryptionUserRoleId = 'e147488a-f6f5-4113-8e2d-b22465e65bf6'
+
 // 1️⃣ Public DNS Zone
 resource publicDnsZone 'Microsoft.Network/dnsZones@2018-05-01' = {
   name: uniquePublicDnsZoneName
@@ -94,19 +101,22 @@ resource keyVaultResource 'Microsoft.KeyVault/vaults@2022-07-01' = if (deployKey
     enabledForDeployment: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    enablePurgeProtection: true
-    enableRbacAuthorization: !empty(adminObjectId) // Use RBAC if admin provided
-    accessPolicies: !empty(adminObjectId) ? [
-      {
-        tenantId: subscription().tenantId
-        objectId: adminObjectId
-        permissions: {
-          keys: ['all']
-          secrets: ['all']
-          certificates: ['all']
-        }
-      }
-    ] : []
+    // Purge protection can only be enabled (true) or left unset (null) - never set to false.
+    // Off by default so `azd down --purge` fully removes the vault; CMK requires it.
+    enablePurgeProtection: (enablePurgeProtection || enableCmkForStorage) ? true : null
+    // Azure RBAC permission model; access is granted via role assignments below
+    enableRbacAuthorization: true
+    accessPolicies: []
+  }
+}
+
+// Give the deploying user (azd sets AZURE_PRINCIPAL_ID) full data-plane access to the vault
+resource adminKeyVaultAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployKeyVault && !empty(adminObjectId)) {
+  name: guid(resourceGroup().id, 'kv-admin', adminObjectId)
+  scope: keyVaultResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultAdministratorRoleId)
+    principalId: adminObjectId
   }
 }
 
@@ -165,22 +175,15 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   }
 }
 
-// Assign storage account MSI access to the Key Vault key if using CMK
-module storageKeyAccess 'modules/keyvaultAccess.bicep' = if (deployKeyVault && enableCmkForStorage) {
-  name: 'storage-key-access'
-  params: {
-    keyVaultName: keyVaultResource.name // Direct reference instead of module output
-    objectId: storageAccount.identity.principalId
-    keyPermissions: [
-      'get'
-      'wrapKey'
-      'unwrapKey'
-    ]
+// Assign the storage account's managed identity access to the Key Vault keys if using CMK (RBAC model)
+resource storageKeyAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployKeyVault && enableCmkForStorage) {
+  name: guid(resourceGroup().id, 'kv-storage-cmk', uniqueStorageAccountName)
+  scope: keyVaultResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultCryptoServiceEncryptionUserRoleId)
+    principalId: storageAccount.identity.principalId
+    principalType: 'ServicePrincipal'
   }
-  dependsOn: [
-    keyVaultResource // Reference correct resource name
-    storageAccount
-  ]
 }
 
 // Export outputs

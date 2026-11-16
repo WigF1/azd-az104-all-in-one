@@ -40,6 +40,15 @@ param enableCmkForStorage bool = false
 @description('Whether to deploy Monitoring (DCR, Connection Monitor, Alerts)')
 param deployMonitoring bool = true
 
+@description('Email address for alert notifications (set with: azd env set AZURE_ALERT_EMAIL you@example.com)')
+param alertEmailAddress string = ''
+
+@description('Whether to deploy the custom RBAC role and policy initiative definitions (needs Owner or User Access Administrator on the subscription)')
+param deployGovernance bool = true
+
+@description('Enable Key Vault purge protection. Off by default so azd down --purge can fully remove the vault; turn it on live (it is irreversible) or enable CMK, which forces it on.')
+param enableKeyVaultPurgeProtection bool = false
+
 param publicDnsZoneBase  string = 'contoso.com'
 param privateDnsZoneBase string = 'contoso.local'
 param vaultName          string = 'contoso-rsv'
@@ -215,6 +224,7 @@ module shared 'sharedServices.bicep' = {
     deployKeyVault: deployKeyVault
     adminObjectId: adminObjectId
     enableCmkForStorage: enableCmkForStorage
+    enablePurgeProtection: enableKeyVaultPurgeProtection
   }
   dependsOn: [
     workloadTier
@@ -255,6 +265,7 @@ module governance 'governance.bicep' = {
   name: 'governance-${hubLocation}'
   scope: subscription()
   params: {
+    deployGovernance: deployGovernance
     resourceGroupName: resourceGroup().name
     allowedLocations: [
       hubLocation
@@ -286,6 +297,7 @@ module monitoring 'monitoring.bicep' = if (deployMonitoring) {
     workloadLbName:      'workload-lb'
     appGwName:           'app-gateway'
     vaultName:           vaultName
+    alertEmailAddress:   !empty(alertEmailAddress) ? alertEmailAddress : 'trainer@contoso.com'
   }
   dependsOn: [
     webTier

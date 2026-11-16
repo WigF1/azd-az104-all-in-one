@@ -85,20 +85,15 @@ azd down --force
 azd down --purge --force
 ```
 
-**Note:** The `azd down` command automatically cleans up subscription-scoped governance deployments via a postdown hook. The governance deployment (custom RBAC roles and policy definitions) is removed automatically.
+**Note:** `azd down` runs a postdown hook (PowerShell 7 / `pwsh` required) that removes the resources living outside the resource group: the Connection Monitor in `NetworkWatcherRG`, the custom RBAC role and the policy initiative definition. Policy assignments you create by hand during a demo are not removed.
+
+Key Vault purge protection is **off by default**, so `azd down --purge` fully removes the vault and you can redeploy with the same environment name straight away. If you enable purge protection (or CMK), the vault name stays reserved for 7 days after deletion.
 
 ### Manual Cleanup (if needed)
 
-If you need to manually clean up the governance deployment:
+If the hook could not run, re-run it (it reads `AZURE_LOCATION` and `AZURE_RESOURCE_GROUP` from the azd environment):
 
 ```bash
-# Check the hub location from your parameter file
-$hubLocation = (Get-Content infra/main.parameters.json | ConvertFrom-Json).parameters.hubLocation.value
-
-# Delete the subscription-scoped governance deployment
-az deployment sub delete --name "governance-$hubLocation"
-
-# Or run the cleanup hook manually
 azd hooks run postdown
 ```
 
@@ -127,8 +122,16 @@ Edit `infra/main.parameters.json` before running `azd up`. Key parameters you ca
 ```json
 "deployBastion": { "value": false },      // Set to false to skip the Bastion Developer hosts (free; check region support)
 "deployVpnGateway": { "value": false },   // Set to false to skip VPN Gateway
-"deployKeyVault": { "value": true }       // Enable/disable Key Vault demos
+"deployKeyVault": { "value": true },      // Enable/disable Key Vault demos
+"deployGovernance": { "value": true },    // Custom RBAC role + policy initiative definitions (needs Owner/User Access Administrator)
+"enableKeyVaultPurgeProtection": { "value": false } // Off so azd down --purge works; enable it live in the Key Vault demo
 ```
+
+**Alert email:** monitoring alerts go to the address in the `AZURE_ALERT_EMAIL` azd environment value. Set it once per environment before `azd up`:
+```bash
+azd env set AZURE_ALERT_EMAIL you@example.com
+```
+If it isn't set, alerts go to the placeholder `trainer@contoso.com`.
 
 **VM Size Configuration:**
 
@@ -155,7 +158,7 @@ Control VM sizes for cost optimization or quota constraints:
 "privateDnsZoneBase": { "value": "contoso.local" },
 "vaultName": { "value": "contoso-rsv" },
 "storageAccountPrefix": { "value": "staz104" },
-"adminObjectId": { "value": "" }  // Optional: your Azure AD Object ID for Key Vault access
+"adminObjectId": { "value": "${AZURE_PRINCIPAL_ID}" }  // Set automatically by azd: the signed-in user gets Key Vault Administrator
 ```
 
 After editing the parameter file, run:
@@ -200,7 +203,8 @@ azd up
 
 ## Troubleshooting
 
-- Key Vault deployment fails: Verify your Object ID is correct and that you have sufficient permissions
+- Key Vault deployment fails: you need permission to create role assignments (Owner or User Access Administrator) because the deployer is granted Key Vault Administrator
+- Governance deployment fails with an authorization error: set `deployGovernance` to `false`, or get Owner/User Access Administrator on the subscription
 - Custom RBAC role not visible: It may take a few minutes for the role to appear in the Azure Portal
 - Monitoring agent failures: Ensure VMs are fully provisioned before deploying monitoring
 - Location conflicts: See the "Cleanup for Previous Deployments" section above

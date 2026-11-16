@@ -181,10 +181,9 @@ flowchart TB
 | | Private DNS Zone | contoso-xxxx.local | Global | No |
 | | Recovery Services Vault | RS0 Standard | Hub | No |
 | | Storage Account | Standard LRS | Hub | No |
-| | Key Vault | Standard | Hub | Yes (`deployKeyVault`) |
-| **Governance** | Azure Policy | Allowed Locations | Subscription | No |
-| | Azure Policy | Allowed VM Sizes | Subscription | No |
-| | Custom Role | VM Support Engineer | Subscription | No |
+| | Key Vault | Standard, Azure RBAC | Hub | Yes (`deployKeyVault`) |
+| **Governance** | Policy initiative (definition only) | Allowed Locations, Allowed VM Sizes, Require tag, Audit unmanaged disks | Subscription | Yes (`deployGovernance`) |
+| | Custom Role | VM Support Engineer | Subscription | Yes (`deployGovernance`) |
 | **Monitoring** | Log Analytics Workspace | - | Hub | Yes (`deployMonitoring`) |
 | | Network Watcher | - | All regions | Yes |
 | | DCR + AMA | VM Insights | All tiers | Yes |
@@ -197,7 +196,10 @@ flowchart TB
 |-----------|---------|-------------|
 | `deployBastion` | `true` | Deploy a free Bastion Developer host in each VM VNet (spoke1, spoke2, workload) |
 | `deployVpnGateway` | `true` | Deploy VPN Gateway + Gateway Transit |
-| `deployKeyVault` | `true` | Deploy Key Vault for CMK demos |
+| `deployKeyVault` | `true` | Deploy Key Vault for CMK demos (deployer gets Key Vault Administrator) |
+| `enableKeyVaultPurgeProtection` | `false` | Key Vault purge protection (forced on when CMK is enabled) |
+| `deployGovernance` | `true` | Custom RBAC role + policy initiative definitions (not assigned) |
+| `alertEmailAddress` | `${AZURE_ALERT_EMAIL}` | Alert recipient; falls back to `trainer@contoso.com` |
 | `enableCmkForStorage` | `false` | Enable Customer-Managed Keys on Storage |
 | `deployMonitoring` | `true` | Deploy full monitoring stack |
 
