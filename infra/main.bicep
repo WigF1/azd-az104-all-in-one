@@ -20,7 +20,7 @@ param adminUsername string
 param adminPassword string
 
 // Add parameter to control Bastion deployment
-@description('Whether to deploy Bastion Host')
+@description('Whether to deploy Bastion Developer hosts (free) in spoke1, spoke2 and workload VNets')
 param deployBastion bool = true
 
 // Add parameter to control VPN deployment
@@ -87,18 +87,26 @@ module network 'network.bicep' = {
   }
 }
 
-module bastion 'bastion.bicep' = if (deployBastion) {
-  name: 'bastion'
+// Bastion Developer SKU (free) does not support VNet peering, so instead of a single
+// hub bastion we deploy one Developer bastion into each VNet that hosts VMs.
+// The hub VNet has no VMs, so it gets none (AzureBastionSubnet is left in place).
+var bastionTargets = [
+  { vnetName: spoke1VnetName,   location: spoke1Location }
+  { vnetName: spoke2VnetName,   location: spoke2Location }
+  { vnetName: workloadVnetName, location: workloadLocation }
+]
+
+module bastion 'bastion.bicep' = [for target in bastionTargets: if (deployBastion) {
+  name: 'bastion-${target.vnetName}'
   params: {
-    location:      hubLocation
-    vnetName:      hubVnetName
-    bastionName:   'hub-bastion'
-    pipName:       'hub-bastion-pip'
+    location:    target.location
+    vnetName:    target.vnetName
+    bastionName: '${target.vnetName}-bastion'
   }
   dependsOn: [
-    network 
+    network
   ]
-}
+}]
 
 module vpnGateway 'vpnGateway.bicep' = if (deployVpnGateway) {
   name: 'vpn'
