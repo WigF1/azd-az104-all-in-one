@@ -14,14 +14,36 @@ hooks:
     interactive: true
     continueOnError: true
     run: |
-      Write-Host "Cleaning up subscription-scoped governance deployment..." -ForegroundColor Yellow
-      $hubLocation = (Get-Content infra/main.parameters.json | ConvertFrom-Json).parameters.hubLocation.value
-      $deploymentName = "governance-$hubLocation"
-      Write-Host "Attempting to delete deployment: $deploymentName" -ForegroundColor Cyan
-      az deployment sub delete --name $deploymentName 2>$null
-      if ($LASTEXITCODE -eq 0) {
-        Write-Host "✓ Governance deployment cleaned up successfully" -ForegroundColor Green
-      } else {
-        Write-Host "ℹ No governance deployment found (this is normal if governance wasn't deployed)" -ForegroundColor Gray
+      # azd exposes the environment's values (AZURE_LOCATION, AZURE_RESOURCE_GROUP, ...) to hooks
+      $location = $env:AZURE_LOCATION
+      $rg       = $env:AZURE_RESOURCE_GROUP
+      Write-Host "Cleaning up resources that live outside the resource group..." -ForegroundColor Yellow
+
+      # 1. Connection Monitor (lives in NetworkWatcherRG, not in the azd resource group)
+      if ($location) {
+        az network watcher connection-monitor delete --name az104-cm-web-backends --location $location 2>$null
+        if ($LASTEXITCODE -eq 0) { Write-Host "✓ Connection monitor deleted" -ForegroundColor Green }
+        else { Write-Host "ℹ No connection monitor found" -ForegroundColor Gray }
       }
-    
+
+      # 2. Subscription-scoped governance: custom role + policy initiative.
+      #    Deleting the deployment record alone does NOT delete the resources it created.
+      if ($rg) {
+        $roleName = "VM Support Engineer ($rg)"
+        $role = az role definition list --custom-role-only true --name $roleName --query "[0].name" -o tsv 2>$null
+        if ($role) {
+          az role definition delete --name $roleName 2>$null
+          Write-Host "✓ Custom role '$roleName' deleted" -ForegroundColor Green
+        } else { Write-Host "ℹ No custom role '$roleName' found" -ForegroundColor Gray }
+
+        $initiatives = az policy set-definition list --query "[?displayName=='Virtual Machine Governance for $rg'].name" -o tsv 2>$null
+        foreach ($name in ($initiatives -split "`n" | Where-Object { $_ })) {
+          az policy set-definition delete --name $name 2>$null
+          Write-Host "✓ Policy initiative '$name' deleted" -ForegroundColor Green
+        }
+      } else {
+        Write-Host "ℹ AZURE_RESOURCE_GROUP not set; skipping custom role and policy cleanup" -ForegroundColor Gray
+      }
+
+      if ($location) { az deployment sub delete --name "governance-$location" 2>$null }
+      Write-Host "Cleanup finished. Policy assignments made by hand in class are not removed." -ForegroundColor Yellow

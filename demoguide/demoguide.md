@@ -29,19 +29,22 @@
 
 ### 2. What can I demo from this scenario after deployment
 
-- Hub and spoke network topology
-- Application Gateway (with WAF) and Load Balancer configurations
-- Web App Service behind the App GW, is allowing access only through the load balancer, checkout the network restrictions on it
-- The 2 VMs behind the Azure LB have custom page to show the host's name so that you can demo the distribution
-- Private Link, Standard LB behind it, with a VM and an IIS. A Private Endpoint is deployed in another region not peered vnet and gets access to the IIS.
-- Azure Bastion for secure VM access
-- Key Vault and Customer-Managed Keys
+- Hub and spoke network topology (spoke1 and spoke2 peered to the hub; workload VNet deliberately unpeered)
+- Non-transitive peering and user-defined routes (an unassociated `custom-route-table` sends 0.0.0.0/0 to a non-existent NVA)
+- Application Gateway (WAF_v2, Prevention mode, OWASP 3.2) in front of an App Service
+- The App Service is locked down with access restrictions so it only accepts traffic from the Application Gateway's public IP; browsing its azurewebsites.net URL directly returns 403
+- The 2 VMs behind the public Azure Load Balancer (web-lb) serve a page showing the VM's name, so you can demo the distribution. Use fresh connections (e.g. `curl.exe` in a loop) - a browser refresh reuses its connection and usually hits the same VM
+- Inbound NAT rules on web-lb for RDP (ports 33891/33892) are blocked by the spoke1 NSG - a ready-made NSG troubleshooting demo with IP flow verify
+- Private Link: a Private Link Service in front of a private Standard LB with an IIS VM (workload-vnet). A Private Endpoint in spoke2 (another region, not peered) reaches the IIS page
+- Azure Bastion Developer (free), one per VM VNet, for secure VM access
+- Key Vault (Azure RBAC model, deployer granted Key Vault Administrator) for Customer-Managed Keys demos
 - VPN Gateway to show around the settings
-- Recovery Services Vault to show around the settings
-- Custom RBAC roles and Policy definitions
-- Public DNS Zone to show around the setting
-- Private DNS Zone used to demonstrate communication across vnet peering by hostname i.e. ping, nslookup
+- Recovery Services Vault to show around the settings (it can only protect VMs in its own region)
+- Custom RBAC role (VM Support Engineer) and a VM governance policy initiative (definitions only - assign them live)
+- Public DNS Zone to show around the settings
+- Private DNS Zone with auto-registration, used to demonstrate name resolution across VNet peering by hostname i.e. ping, nslookup (enable ICMP in the Windows firewall first)
 - Storage Account to demo Service Endpoint configuration
+- Monitoring: VM Insights, alert rules, an action group and a Connection Monitor between the web VMs
 
 
 
